@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 from datetime import datetime
 from app.config import settings
 
