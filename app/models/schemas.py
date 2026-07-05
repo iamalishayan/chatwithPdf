@@ -1,4 +1,12 @@
+from enum import Enum
+from typing import List, Dict, Any
 from pydantic import BaseModel, Field
+
+
+class DocumentType(str, Enum):
+    STANDARD = "standard"
+    LEGAL = "legal"
+    TECHNICAL = "technical"
 
 
 class ChatRequest(BaseModel):
@@ -28,4 +36,24 @@ class DocumentMetadata(BaseModel):
     )
     uploaded_at: str = Field(
         ..., description="ISO timestamp of when the file was processed."
+    )
+
+
+class GenericMessageResponse(BaseModel):
+    message: str = Field(
+        ..., description="Detailed status message of the completed action."
+    )
+
+
+class ChunkItem(BaseModel):
+    id: str = Field(..., description="The unique chunk ID.")
+    text: str = Field(..., description="The chunk text segment.")
+    metadata: Dict[str, Any] = Field(
+        ..., description="Metadata dict associated with the chunk."
+    )
+
+
+class ChunkListResponse(BaseModel):
+    chunks: List[ChunkItem] = Field(
+        ..., description="List of all chunk records matching the document ID."
     )

@@ -32,7 +32,9 @@ def add_documents(
 
 
 def query_documents(
-    doc_id: str, query_embedding: List[float], n_results: int = 3
+    doc_id: str,
+    query_embedding: List[float],
+    n_results: int = 3,
 ) -> Dict[str, Any]:
     """Queries documents based on cosine similarity and strictly filters by doc_id."""
     results = collection.query(
@@ -41,3 +43,23 @@ def query_documents(
         where={"doc_id": doc_id},
     )
     return results
+
+
+def delete_document_vectors(doc_id: str):
+    """Deletes all vector chunks belonging to the specified document ID."""
+    collection.delete(where={"doc_id": doc_id})
+    logger.info(f"Deleted vector chunks in ChromaDB for doc_id={doc_id}")
+
+
+def get_document_chunks(doc_id: str) -> List[Dict[str, Any]]:
+    """Retrieves all stored text chunks and metadata for a specific document ID."""
+    results = collection.get(where={"doc_id": doc_id})
+    if not results or not results["documents"]:
+        return []
+
+    chunks = []
+    for chunk_id, text, metadata in zip(
+        results["ids"], results["documents"], results["metadatas"]
+    ):
+        chunks.append({"id": chunk_id, "text": text, "metadata": metadata})
+    return chunks

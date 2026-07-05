@@ -73,6 +73,15 @@ def create_document(doc_id: str, filename: str, version: int) -> Dict[str, Any]:
     }
 
 
+def delete_document_record(doc_id: str) -> bool:
+    """Deletes a document metadata record from SQLite by its unique ID. Returns True if a record was deleted."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def get_all_documents() -> List[Dict[str, Any]]:
     """Fetches all documents ordered by upload date."""
     with sqlite3.connect(DB_PATH) as conn:

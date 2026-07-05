@@ -1,18 +1,33 @@
 import logging
 import uuid
 import asyncio
-from typing import List, Dict, Any
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from typing import List
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
-from app.models.schemas import ChatRequest, UploadResponse, DocumentMetadata
+from app.config import settings
+from app.models.schemas import (
+    ChatRequest,
+    UploadResponse,
+    DocumentMetadata,
+    GenericMessageResponse,
+    ChunkListResponse,
+    ChunkItem,
+    DocumentType,
+)
 from app.services.pdf_extractor import extract_text_from_pdf
 from app.services.chunking import chunk_text
-from app.services.vector_store import add_documents, query_documents
+from app.services.vector_store import (
+    add_documents,
+    query_documents,
+    delete_document_vectors,
+    get_document_chunks,
+)
 from app.services.database import (
     create_document,
     get_all_documents,
     get_next_version,
     archive_old_versions,
+    delete_document_record,
 )
 from app.llm.gemini_client import get_embedding, stream_answer
 
@@ -21,10 +36,20 @@ router = APIRouter(prefix="/api")
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_document(file: UploadFile = File(...)):
-    """Ingests a PDF file, increments its version if it exists, archives old versions, chunks, embeds, and stores it."""
+async def upload_document(
+    file: UploadFile = File(...),
+    doc_type: DocumentType = Form(DocumentType.STANDARD),
+):
+    """Ingests a PDF, resolves its semantic chunking profile, archives older versions, chunks, embeds, and stores it."""
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
+
+    # Resolve chunking profiles safely from server settings config
+    profile = settings.CHUNK_PROFILES.get(
+        doc_type.value, settings.CHUNK_PROFILES["standard"]
+    )
+    chunk_size = profile["size"]
+    chunk_overlap = profile["overlap"]
 
     try:
         filename = file.filename
@@ -44,8 +69,8 @@ async def upload_document(file: UploadFile = File(...)):
         # Extract text
         raw_text = extract_text_from_pdf(file_bytes)
 
-        # Chunk text
-        chunks = chunk_text(raw_text)
+        # Chunk text based on profile settings
+        chunks = chunk_text(raw_text, chunk_size=chunk_size, overlap=chunk_overlap)
         if not chunks:
             raise HTTPException(
                 status_code=400, detail="The PDF file contains no readable text."
@@ -59,18 +84,21 @@ async def upload_document(file: UploadFile = File(...)):
 
         # Store in ChromaDB
         add_documents(
-            doc_id=doc_id, documents=chunks, embeddings=embeddings, metadatas=metadatas
+            doc_id=doc_id,
+            documents=chunks,
+            embeddings=embeddings,
+            metadatas=metadatas,
         )
 
         # Store metadata in SQLite database
         create_document(doc_id=doc_id, filename=filename, version=version)
 
         logger.info(
-            f"Successfully processed and stored document version. ID: {doc_id}, Name: {filename}, Version: {version}"
+            f"Successfully processed and stored document version. ID: {doc_id}, Name: {filename}, Version: {version}, Profile: {doc_type}"
         )
 
         return UploadResponse(
-            message=f"Successfully processed {len(chunks)} chunks.",
+            message=f"Successfully processed {len(chunks)} chunks using '{doc_type}' profile (size={chunk_size}, overlap={chunk_overlap}).",
             doc_id=doc_id,
             filename=filename,
             version=version,
@@ -93,16 +121,71 @@ async def list_documents():
         raise HTTPException(status_code=500, detail="Failed to retrieve documents.")
 
 
+@router.get("/documents/{doc_id}/chunks", response_model=ChunkListResponse)
+async def list_document_chunks(doc_id: str):
+    """Retrieves all vector chunks and associated text segments matching the document ID."""
+    try:
+        chunks_data = get_document_chunks(doc_id)
+        if not chunks_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No chunks found for document ID '{doc_id}'. Check if it exists.",
+            )
+
+        chunks = [
+            ChunkItem(id=c["id"], text=c["text"], metadata=c["metadata"])
+            for c in chunks_data
+        ]
+        return ChunkListResponse(chunks=chunks)
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error retrieving chunks: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve document chunks."
+        )
+
+
+@router.delete("/documents/{doc_id}", response_model=GenericMessageResponse)
+async def delete_document(doc_id: str):
+    """Deletes a document from the system, wiping SQLite records and associated ChromaDB vectors."""
+    try:
+        # 1. Delete from SQLite
+        deleted_from_db = delete_document_record(doc_id)
+        if not deleted_from_db:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Document with ID '{doc_id}' not found in registry.",
+            )
+
+        # 2. Delete vectors from ChromaDB
+        delete_document_vectors(doc_id)
+
+        return GenericMessageResponse(
+            message=f"Successfully deleted document '{doc_id}' from the system."
+        )
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error deleting document: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to delete document from the system."
+        )
+
+
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """Queries ChromaDB using the question's embedding, retrieves context, and streams the answer with metadata and performance metrics."""
+    """Queries ChromaDB using the question's embedding, retrieves context, and streams the answer."""
     try:
         # 1. Embed query
         query_embedding = await get_embedding(request.message)
 
         # 2. Query ChromaDB filtered strictly by doc_id
         query_results = query_documents(
-            doc_id=request.doc_id, query_embedding=query_embedding, n_results=3
+            doc_id=request.doc_id,
+            query_embedding=query_embedding,
+            n_results=3,
         )
 
         documents = query_results.get("documents", [[]])[0]
@@ -116,14 +199,14 @@ async def chat_stream(request: ChatRequest):
             )
 
         # Structure source data to pass down the stream
-        sources: List[Dict[str, Any]] = []
+        sources = []
         for chunk_id, text in zip(ids, documents):
             sources.append(
                 {
                     "id": chunk_id,
-                    "text": text[:200] + "..."
-                    if len(text) > 200
-                    else text,  # Send snippet to keep response lightweight
+                    "text": (
+                        text[:200] + "..." if len(text) > 200 else text
+                    ),  # Send snippet to keep response lightweight
                 }
             )
 
