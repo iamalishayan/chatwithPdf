@@ -1,0 +1,8 @@
+chatWithPdfPlan.md
+.env
+chroma_data/
+__pycache__/
+*.pyc
+.DS_Store
+venv/
+.venv/
