@@ -1,5 +1,6 @@
 from typing import List
 
+
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
     """Splits text into overlapping chunks of a specific character length."""
     chunks = []
@@ -7,7 +8,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
     text_len = len(text)
     if text_len == 0:
         return []
-    
+
     while start < text_len:
         end = start + chunk_size
         chunks.append(text[start:end])

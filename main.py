@@ -19,7 +19,7 @@ except Exception as e:
 app = FastAPI(
     title="Chat with PDF Backend",
     description="Enterprise-grade local backend for document ingestion and retrieval using ChromaDB and Gemini.",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Enable CORS
@@ -33,6 +33,7 @@ app.add_middleware(
 
 # Include routes
 app.include_router(router)
+
 
 @app.get("/")
 def read_root():
