@@ -10,8 +10,8 @@ class DocumentType(str, Enum):
 
 
 class ChatRequest(BaseModel):
-    doc_id: str = Field(
-        ..., description="The unique document identifier to retrieve context from."
+    doc_ids: List[str] = Field(
+        ..., description="List of unique document identifiers to retrieve context from."
     )
     message: str = Field(..., description="The user query or message.")
 

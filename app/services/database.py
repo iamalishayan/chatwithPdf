@@ -104,3 +104,19 @@ def get_active_document_id(filename: str) -> str:
         )
         row = cursor.fetchone()
         return row[0] if row else None
+
+
+def get_documents_metadata(doc_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Fetches metadata records for a list of document IDs, mapped by their ID."""
+    if not doc_ids:
+        return {}
+    placeholders = ",".join("?" for _ in doc_ids)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT id, filename, version, status, uploaded_at FROM documents WHERE id IN ({placeholders})",
+            doc_ids,
+        )
+        rows = cursor.fetchall()
+        return {row["id"]: dict(row) for row in rows}

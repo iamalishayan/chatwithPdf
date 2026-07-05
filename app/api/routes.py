@@ -1,7 +1,7 @@
 import logging
 import uuid
 import asyncio
-from typing import List
+from typing import List, Dict
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from app.config import settings
@@ -28,6 +28,7 @@ from app.services.database import (
     get_next_version,
     archive_old_versions,
     delete_document_record,
+    get_documents_metadata,
 )
 from app.llm.gemini_client import get_embedding, stream_answer
 
@@ -181,22 +182,46 @@ async def chat_stream(request: ChatRequest):
         # 1. Embed query
         query_embedding = await get_embedding(request.message)
 
-        # 2. Query ChromaDB filtered strictly by doc_id
+        # 2. Query ChromaDB filtered strictly by doc_ids (increased default top_k search limit for multi-doc candidate pools)
         query_results = query_documents(
-            doc_id=request.doc_id,
+            doc_ids=request.doc_ids,
             query_embedding=query_embedding,
-            n_results=3,
+            n_results=6,
         )
 
         documents = query_results.get("documents", [[]])[0]
         ids = query_results.get("ids", [[]])[0]
+        metadatas = query_results.get("metadatas", [[]])[0]
 
         # Validate documents exist
         if not documents:
             raise HTTPException(
                 status_code=404,
-                detail=f"No relevant context found in document with doc_id '{request.doc_id}'.",
+                detail=f"No relevant context found in documents with IDs {request.doc_ids}.",
             )
+
+        # Resolve document metadata from SQLite for context aggregation
+        metadata_map = get_documents_metadata(request.doc_ids)
+
+        # Group chunks by document ID (ContextAggregator pattern)
+        grouped_chunks: Dict[str, List[str]] = {}
+        for chunk_id, text, metadata in zip(ids, documents, metadatas):
+            doc_id = metadata.get("doc_id")
+            if doc_id not in grouped_chunks:
+                grouped_chunks[doc_id] = []
+            grouped_chunks[doc_id].append(text)
+
+        # Build clean formatted context string
+        context_parts = []
+        for doc_id, chunk_texts in grouped_chunks.items():
+            doc_meta = metadata_map.get(doc_id, {})
+            filename = doc_meta.get("filename", "Unknown Document")
+            version = doc_meta.get("version", "?")
+            header = f"DOCUMENT: {filename} (Version {version})"
+            divider = "-" * len(header)
+            grouped_text = "\n".join(f"* {t}" for t in chunk_texts)
+            context_parts.append(f"{header}\n{divider}\n{grouped_text}")
+        context = "\n\n".join(context_parts)
 
         # Structure source data to pass down the stream
         sources = []
@@ -204,14 +229,9 @@ async def chat_stream(request: ChatRequest):
             sources.append(
                 {
                     "id": chunk_id,
-                    "text": (
-                        text[:200] + "..." if len(text) > 200 else text
-                    ),  # Send snippet to keep response lightweight
+                    "text": (text[:200] + "..." if len(text) > 200 else text),
                 }
             )
-
-        # Combine documents into context
-        context = "\n\n---\n\n".join(documents)
 
         # 3. Return StreamingResponse
         return StreamingResponse(

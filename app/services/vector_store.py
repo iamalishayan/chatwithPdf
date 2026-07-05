@@ -32,15 +32,24 @@ def add_documents(
 
 
 def query_documents(
-    doc_id: str,
+    doc_ids: List[str],
     query_embedding: List[float],
-    n_results: int = 3,
+    n_results: int = 5,
 ) -> Dict[str, Any]:
-    """Queries documents based on cosine similarity and strictly filters by doc_id."""
+    """Queries documents based on cosine similarity, filtered by a list of document IDs."""
+    if not doc_ids:
+        return {"ids": [[]], "documents": [[]], "metadatas": [[]]}
+
+    # Construct the ChromaDB where filter based on one or multiple IDs
+    if len(doc_ids) == 1:
+        where_clause = {"doc_id": doc_ids[0]}
+    else:
+        where_clause = {"doc_id": {"$in": doc_ids}}
+
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=n_results,
-        where={"doc_id": doc_id},
+        where=where_clause,
     )
     return results
 
