@@ -4,7 +4,7 @@ An enterprise-grade, containerized RAG (Retrieval-Augmented Generation) backend 
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 *   **Modular Clean Architecture:** Strict separation of API routes, configurations, LLM clients, and business service layers (chunking, extraction, vector store, DB metadata).
 *   **Automatic Document Versioning:** Seamlessly tracks uploads of the same filename. It assigns version numbers (e.g., `v1 -> v2`) and flags older versions as `archived` in SQLite while keeping the latest version `active`.
@@ -16,7 +16,7 @@ An enterprise-grade, containerized RAG (Retrieval-Augmented Generation) backend 
 
 ---
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```text
 .
@@ -42,7 +42,7 @@ An enterprise-grade, containerized RAG (Retrieval-Augmented Generation) backend 
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 *   **Web Framework:** FastAPI (Uvicorn ASGI)
 *   **Vector Database:** ChromaDB (Cosine similarity space)
@@ -52,7 +52,7 @@ An enterprise-grade, containerized RAG (Retrieval-Augmented Generation) backend 
 
 ---
 
-## 🏃 Local Setup & Running
+## Local Setup & Running
 
 ### Prerequisites
 *   Docker & Docker Compose installed.
@@ -75,7 +75,7 @@ The server will start at `http://localhost:8000`. You can access the interactive
 
 ---
 
-## 🧪 Verification & Endpoint Usage
+## Verification & Endpoint Usage
 
 ### 1. Health Check
 ```bash
