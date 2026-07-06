@@ -8,7 +8,9 @@ An enterprise-grade, containerized RAG (Retrieval-Augmented Generation) backend 
 
 *   **Modular Clean Architecture:** Strict separation of API routes, configurations, LLM clients, and business service layers (chunking, extraction, vector store, DB metadata).
 *   **Automatic Document Versioning:** Seamlessly tracks uploads of the same filename. It assigns version numbers (e.g., `v1 -> v2`) and flags older versions as `archived` in SQLite while keeping the latest version `active`.
-*   **ChromaDB Vector Integration:** Generates embeddings using `gemini-embedding-001` and filters retrieval matches strictly by version IDs.
+*   **Multi-Document Chunking Profiles:** Accepts a `doc_type` parameter on upload (`standard`, `legal`, `technical`) to resolve semantic chunking profiles (size/overlap) optimized for that document category.
+*   **Multi-Document Vector Integration:** Generates embeddings using `gemini-embedding-001` and filters retrieval matches across multiple document IDs using ChromaDB `$in` query filtering.
+*   **Context Aggregator:** Groups retrieved chunks dynamically by document name and version, presenting them with clear headers to the LLM to minimize hallucinations.
 *   **Rich SSE Stream:** Streams responses token-by-token with structured event packages:
     *   `sources`: Citations of the referenced text chunks.
     *   `token`: Generated text tokens.
@@ -87,10 +89,11 @@ curl http://localhost:8000/
 ```
 
 ### 2. Upload a PDF Document
-Upload any PDF file. The API automatically assigns a UUID and sets `version=1` (or increments it if the file already exists):
+Upload any PDF file. You can optionally specify a `doc_type` (`standard`, `legal`, or `technical`) as form data to adjust chunk configurations:
 ```bash
 curl -X POST "http://localhost:8000/api/upload" \
-  -F "file=@/path/to/your/document.pdf"
+  -F "file=@/path/to/your/document.pdf" \
+  -F "doc_type=legal"
 ```
 **Response:**
 ```json
@@ -120,21 +123,21 @@ curl http://localhost:8000/api/documents
 ]
 ```
 
-### 4. Stream RAG Chat Query
-Initiate an SSE connection to query the specific document ID:
+### 4. Stream RAG Chat Query (Multi-Document)
+Initiate an SSE connection to query multiple document IDs:
 ```bash
 curl -X POST "http://localhost:8000/api/chat/stream" \
   -H "Content-Type: application/json" \
   -d '{
-    "doc_id": "c2586b3c-32b3-4143-aebc-76e81a678408",
-    "message": "What is this document about?"
+    "doc_ids": ["c2586b3c-32b3-4143-aebc-76e81a678408", "b3901b3c-12c3-4243-bebc-76e81a678409"],
+    "message": "What do these documents say about travel expenses?"
   }'
 ```
 **Streamed SSE Output:**
 ```text
 data: {"event": "sources", "data": [{"id": "c2586b3c-32b3-4143-aebc-76e81a678408_chunk_0", "text": "Snippet..."}]}
 
-data: {"event": "token", "text": "This document is..."}
+data: {"event": "token", "text": "Based on the travel policy document..."}
 
 data: {"event": "metrics", "ttft_seconds": 1.258, "total_duration_seconds": 5.156}
 ```
