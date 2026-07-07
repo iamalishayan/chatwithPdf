@@ -6,7 +6,7 @@ An enterprise-grade, containerized RAG (Retrieval-Augmented Generation) backend 
 
 ## Live Demo & Testing
 
-🚀 **Public Interactive API Docs:** Anyone can test this application live at [http://168.144.95.33/docs](http://168.144.95.33/docs).
+**Public Interactive API Docs:** Anyone can test this application live at [http://168.144.95.33/docs](http://168.144.95.33/docs).
 
 You can upload files, retrieve records, and test streaming queries directly from the Swagger UI.
 
