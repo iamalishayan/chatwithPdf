@@ -37,4 +37,4 @@ app.include_router(router)
 
 @app.get("/")
 def read_root():
-    return {"status": "healthy", "service": "Chat with PDF Backend"}
+    return {"status": "healthy", "service": "Chat with PDF Backend Deployed"}
