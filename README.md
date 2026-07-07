@@ -4,6 +4,14 @@ An enterprise-grade, containerized RAG (Retrieval-Augmented Generation) backend 
 
 ---
 
+## Live Demo & Testing
+
+🚀 **Public Interactive API Docs:** Anyone can test this application live at [http://168.144.95.33/docs](http://168.144.95.33/docs).
+
+You can upload files, retrieve records, and test streaming queries directly from the Swagger UI.
+
+---
+
 ## Key Features
 
 *   **Modular Clean Architecture:** Strict separation of API routes, configurations, LLM clients, and business service layers (chunking, extraction, vector store, DB metadata).
@@ -81,7 +89,7 @@ The server will start at `http://localhost:8000`. You can access the interactive
 
 ### 1. Health Check
 ```bash
-curl http://localhost:8000/
+curl http://168.144.95.33/
 ```
 **Response:**
 ```json
@@ -91,7 +99,7 @@ curl http://localhost:8000/
 ### 2. Upload a PDF Document
 Upload any PDF file. You can optionally specify a `doc_type` (`standard`, `legal`, or `technical`) as form data to adjust chunk configurations:
 ```bash
-curl -X POST "http://localhost:8000/api/upload" \
+curl -X POST "http://168.144.95.33/api/upload" \
   -F "file=@/path/to/your/document.pdf" \
   -F "doc_type=legal"
 ```
@@ -108,7 +116,7 @@ curl -X POST "http://localhost:8000/api/upload" \
 ### 3. List Stored Documents
 Fetch the metadata catalogue showing version histories and status states:
 ```bash
-curl http://localhost:8000/api/documents
+curl http://168.144.95.33/api/documents
 ```
 **Response:**
 ```json
@@ -126,7 +134,7 @@ curl http://localhost:8000/api/documents
 ### 4. Stream RAG Chat Query (Multi-Document)
 Initiate an SSE connection to query multiple document IDs:
 ```bash
-curl -X POST "http://localhost:8000/api/chat/stream" \
+curl -X POST "http://168.144.95.33/api/chat/stream" \
   -H "Content-Type: application/json" \
   -d '{
     "doc_ids": ["c2586b3c-32b3-4143-aebc-76e81a678408", "b3901b3c-12c3-4243-bebc-76e81a678409"],
@@ -141,3 +149,15 @@ data: {"event": "token", "text": "Based on the travel policy document..."}
 
 data: {"event": "metrics", "ttft_seconds": 1.258, "total_duration_seconds": 5.156}
 ```
+
+---
+
+## Design Tradeoffs
+
+### Managed API (Gemini) vs. Self-Hosted LLM
+For the **ChatWithPdf** backend, we explicitly chose a managed API layer (**Google Gemini**) over self-hosting an open-weight LLM (e.g., Llama 3 or Mistral via Ollama/vLLM). The core tradeoffs evaluated were:
+
+1. **Resource Constraints:** Hosting an open-weight model requires significant VRAM/GPU resources or a massive RAM footprint on CPU VMs. A basic DigitalOcean droplet (e.g., 1-2 GB RAM / 1 vCPU) cannot host or run self-hosted LLMs reliably. By using Gemini API, our backend droplet operates with a minuscule memory footprint (~30% of 1 GB RAM).
+2. **Latency & Cold Starts:** Managed model endpoints have highly optimized hardware setups yielding fast Time-to-First-Token (TTFT) metrics, bypassing VM memory bottleneck limitations.
+3. **Operational Overhead:** Gemini API handles concurrency, context scaling, and safety filtering out of the box, letting the application focus strictly on the clean architecture pipeline and database-driven version controls rather than managing infrastructure and model configurations.
+
