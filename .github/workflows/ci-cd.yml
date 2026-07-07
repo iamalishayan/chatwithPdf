@@ -59,6 +59,7 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           script: |
             cd /var/www/chatwithPdf
-            git pull origin main
+            git fetch --all
+            git reset --hard origin/main
             docker compose down
             docker compose up --build -d
